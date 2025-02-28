@@ -13,12 +13,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Box sizing rules */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+
 
 /* Prevent font size inflation */
 html {
