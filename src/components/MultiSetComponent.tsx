@@ -141,7 +141,7 @@ const MultiSetComponent: React.FC<MultiSetProps> = ({ pageSets }) => {
       <div className="set-e-layout">
         <div className="casa-photos">
           {[1, 2, 3, 4, 5].map((index) => (
-            <div key={`casa-${index}`} className="photo-casa">
+            <div key={`casa-${index}`} className="photo photo-casa">
               <img src={imageUrl} alt={`Casa photo ${index}`} />
             </div>
           ))}
