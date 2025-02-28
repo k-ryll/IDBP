@@ -280,7 +280,7 @@ const saveToPDF = async () => {
         container.innerHTML = '';
         
         // Add the sets from the target page
-        pages[i].forEach((pageSet, index) => {
+        pages[i].forEach((pageSet) => {
           const setDiv = document.createElement('div');
           setDiv.className = 'layout-set';
           
