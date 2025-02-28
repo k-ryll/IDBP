@@ -328,6 +328,10 @@
   width: 1in !important;  /* 1 inch */
   height: 1in !important; /* 1 inch */
 }
+.photoc-small {
+  width: 1in !important;  /* 1 inch */
+  height: 1in !important; /* 1 inch */
+}
 
 .actions {
   margin-top: 20px;
