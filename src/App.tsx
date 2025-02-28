@@ -1,27 +1,14 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef, MouseEvent } from 'react';
 import './App.css';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
-interface CropArea {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import ImageUploader from './components/ImageUploader';
+import LayoutSelector from './components/LayoutSelector';
+import PageManagement from './components/PageManagement';
+import MultiSetComponent from './components/MultiSetComponent';
 
-interface LayoutSet {
-  id: string;
-  name: string;
-  layoutType: 'setA' | 'custom';
-  description: string;
-}
-
-interface PageSet {
-  setId: string;
-  imageUrl: string;
-  cropArea: CropArea | null;
-}
+import { CropArea, PageSet, LayoutSet } from './types';
 
 const availableLayoutSets: LayoutSet[] = [
   {
@@ -30,373 +17,372 @@ const availableLayoutSets: LayoutSet[] = [
     layoutType: 'setA',
     description: '2 large (2x2) photos and 8 small (1x1) photos'
   },
-  // More sets can be added here
+  {
+    id: 'setB',
+    name: 'Set B',
+    layoutType: 'setB',
+    description: '3 (1.5x1.5) photos and 3 small (1x1) photos'
+  },
+  {
+    id: 'setC',
+    name: 'Set C',
+    layoutType: 'setC',
+    description: '3 (1.8x1.44) photos and 6 small (1x1) photos'
+  },
+  {
+    id: 'setD',
+    name: 'Set D',
+    layoutType: 'setD',
+    description: '6 large (2x2) photos and 8 small (1x1) photos'
+  },
+  {
+    id: 'setE',
+    name: 'Set E / CASA',
+    layoutType: 'setE',
+    description: '5 (2.34x1.5) photos'
+  },
+  // ... add more sets as needed
 ];
 
-const App: React.FC = () => {
+function App() {
+  // ---------------------- State ----------------------
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
-  const [pages, setPages] = useState<Array<PageSet[]>>([[]]);
+  const [pages, setPages] = useState<PageSet[][]>([[]]);
   const [currentPage, setCurrentPage] = useState<number>(0);
+
+  // Cropping-related states
   const [isCropping, setIsCropping] = useState<boolean>(false);
-  const [cropStart, setCropStart] = useState<{ x: number, y: number } | null>(null);
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
   const [cropArea, setCropArea] = useState<CropArea | null>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const [cropAspectRatio, setCropAspectRatio] = useState<number | null>(null);
+   
+  // Rotation state
+  const [currentRotation, setCurrentRotation] = useState<number>(0);
+
+  // Refs for cropping
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  
-  // Handle image upload
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target) {
-          const imageUrl = event.target.result as string;
-          setUploadedImages([...uploadedImages, imageUrl]);
-          setCurrentImage(imageUrl);
-        }
-      };
-      reader.readAsDataURL(e.target.files[0]);
-    }
+
+  // PDF preview ref
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // ---------------------- Image Upload Handlers ----------------------
+  const handleImagesChange = (images: string[]) => {
+    setUploadedImages(images);
   };
-  
-  // Start crop
-  const startCrop = () => {
+
+  const handleCurrentImageChange = (imageUrl: string) => {
+    setCurrentImage(imageUrl);
+    // Reset rotation when changing images
+    setCurrentRotation(0);
+  };
+
+  // ---------------------- Rotate Image ----------------------
+ const handleRotateImage = (degrees: number) => {
     if (!currentImage) return;
+
+    // Update the current rotation
+    const newRotation = (currentRotation + degrees) % 360;
+    setCurrentRotation(newRotation);
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      
+      // Determine canvas dimensions based on rotation
+      const isVertical = newRotation === 90 || newRotation === 270;
+      canvas.width = isVertical ? img.height : img.width;
+      canvas.height = isVertical ? img.width : img.height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Move the origin to the center
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((newRotation * Math.PI) / 180);
+      
+      // Draw image offset by half of its width/height
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      // Save the rotated image
+      const rotatedDataUrl = canvas.toDataURL('image/png');
+      setCurrentImage(rotatedDataUrl);
+    };
+    img.src = currentImage;
+  }; 
+
+  // ---------------------- Crop Image Logic ----------------------
+  const handleCropImage = (aspectRatio: number | null = null) => {
+    // Switch to cropping mode
     setIsCropping(true);
     setCropArea(null);
-    
-    // Initialize the canvas with the image for cropping
-    const canvas = cropCanvasRef.current;
-    const image = imageRef.current;
-    
-    if (canvas && image) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Set canvas size to match the image
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        
-        // Draw the image on the canvas
-        ctx.drawImage(image, 0, 0);
-      }
-    }
+    setCropAspectRatio(aspectRatio);
   };
-  
-  // Handle mouse down on crop canvas
-  const handleCropMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+
+  const handleCropMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
     const canvas = cropCanvasRef.current;
     if (!canvas) return;
-    
+
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
+
     setCropStart({ x, y });
     setCropArea({ x, y, width: 0, height: 0 });
   };
-  
-  // Handle mouse move on crop canvas
-  const handleCropMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+
+  const handleCropMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!cropStart || !cropArea) return;
-    
     const canvas = cropCanvasRef.current;
     if (!canvas) return;
-    
+
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
-    // Update the crop area
-    const width = x - cropStart.x;
-    const height = y - cropStart.y;
-    
-    setCropArea({
+
+    // Calculate width and height
+    let width = x - cropStart.x;
+    let height = y - cropStart.y;
+
+    // Maintain aspect ratio if specified
+    if (cropAspectRatio) {
+      if (Math.abs(width) > Math.abs(height * cropAspectRatio)) {
+        // Width is too large for the height
+        width = Math.sign(width) * Math.abs(height * cropAspectRatio);
+      } else {
+        // Height is too large for the width
+        height = Math.sign(height) * Math.abs(width / cropAspectRatio);
+      }
+    }
+
+    const newCropArea: CropArea = {
       x: cropStart.x,
       y: cropStart.y,
       width,
       height
-    });
-    
-    // Redraw the canvas with the crop area
-    drawCropCanvas();
+    };
+    setCropArea(newCropArea);
+
+    drawCropCanvas(newCropArea);
   };
-  
-  // Handle mouse up on crop canvas
+
   const handleCropMouseUp = () => {
     setCropStart(null);
   };
-  
-  // Draw the crop area on the canvas
-  const drawCropCanvas = () => {
+
+  // Redraw the overlay with the new crop area
+  const drawCropCanvas = (area: CropArea) => {
     const canvas = cropCanvasRef.current;
     const image = imageRef.current;
-    
-    if (!canvas || !image || !cropArea) return;
-    
+    if (!canvas || !image) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw the image
-    ctx.drawImage(image, 0, 0);
-    
-    // Draw semi-transparent overlay
+    // Draw the original image
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    // Overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Clear the crop area to show the image
-    ctx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
-    
-    // Draw border around crop area
-    ctx.strokeStyle = '#ffffff';
+
+    // Normalize crop area (handle negative width/height)
+    const normalizedArea = normalizeArea(area);
+
+    // Reveal the crop area
+    ctx.clearRect(normalizedArea.x, normalizedArea.y, normalizedArea.width, normalizedArea.height);
+
+    // Outline the crop
+    ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+    ctx.strokeRect(normalizedArea.x, normalizedArea.y, normalizedArea.width, normalizedArea.height);
+
+    // Draw grid lines (rule of thirds)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1;
+    
+    // Vertical lines
+    for (let i = 1; i <= 2; i++) {
+      const lineX = normalizedArea.x + (normalizedArea.width * i / 3);
+      ctx.beginPath();
+      ctx.moveTo(lineX, normalizedArea.y);
+      ctx.lineTo(lineX, normalizedArea.y + normalizedArea.height);
+      ctx.stroke();
+    }
+    
+    // Horizontal lines
+    for (let i = 1; i <= 2; i++) {
+      const lineY = normalizedArea.y + (normalizedArea.height * i / 3);
+      ctx.beginPath();
+      ctx.moveTo(normalizedArea.x, lineY);
+      ctx.lineTo(normalizedArea.x + normalizedArea.width, lineY);
+      ctx.stroke();
+    }
   };
-  
-  // Apply the crop
+
+  // Helper function to normalize crop area (handle negative width/height)
+  const normalizeArea = (area: CropArea): CropArea => {
+    return {
+      x: area.width < 0 ? area.x + area.width : area.x,
+      y: area.height < 0 ? area.y + area.height : area.y,
+      width: Math.abs(area.width),
+      height: Math.abs(area.height)
+    };
+  };
+
   const applyCrop = () => {
     if (!cropArea || !currentImage) {
       setIsCropping(false);
       return;
     }
-    
-    const canvas = document.createElement('canvas');
+  
+    const normalizedArea = normalizeArea(cropArea);
     const image = imageRef.current;
-    
     if (!image) {
       setIsCropping(false);
       return;
     }
-    
-    // Create a new canvas for the cropped image
-    canvas.width = Math.abs(cropArea.width);
-    canvas.height = Math.abs(cropArea.height);
-    
+  
+    const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       setIsCropping(false);
       return;
     }
-    
-    // Calculate crop coordinates (handle negative width/height)
-    const cropX = cropArea.width > 0 ? cropArea.x : cropArea.x + cropArea.width;
-    const cropY = cropArea.height > 0 ? cropArea.y : cropArea.y + cropArea.height;
-    const cropWidth = Math.abs(cropArea.width);
-    const cropHeight = Math.abs(cropArea.height);
-    
-    // Draw the cropped portion
-    ctx.drawImage(
-      image, 
-      cropX, cropY, cropWidth, cropHeight,
-      0, 0, cropWidth, cropHeight
-    );
-    
-    // Get data URL of the cropped image
-    const croppedImageUrl = canvas.toDataURL('image/jpeg');
-    
-    // Add the cropped image to the list
-    setUploadedImages([...uploadedImages, croppedImageUrl]);
-    setCurrentImage(croppedImageUrl);
-    
-    // Exit cropping mode
+  
+    const displayCanvas = cropCanvasRef.current;
+    if (!displayCanvas) {
+      setIsCropping(false);
+      return;
+    }
+  
+    const ratioX = image.naturalWidth / displayCanvas.width;
+    const ratioY = image.naturalHeight / displayCanvas.height;
+  
+    const realX = normalizedArea.x * ratioX;
+    const realY = normalizedArea.y * ratioY;
+    const realW = normalizedArea.width * ratioX;
+    const realH = normalizedArea.height * ratioY;
+  
+    canvas.width = realW;
+    canvas.height = realH;
+    ctx.drawImage(image, realX, realY, realW, realH, 0, 0, realW, realH);
+  
+    const croppedDataUrl = canvas.toDataURL('image/jpeg');
+  
+    // Update uploaded images list with cropped image
+    setUploadedImages(prevImages => [...prevImages, croppedDataUrl]);
+  
+    // Update current image to the cropped one
+    setCurrentImage(croppedDataUrl);
+  
     setIsCropping(false);
+    setCropArea(null);
+    setCropAspectRatio(null);
   };
   
-  // Cancel crop
   const cancelCrop = () => {
     setIsCropping(false);
     setCropArea(null);
+    setCropAspectRatio(null);
   };
-  
-  // Add selected set to current page
+
+  // ---------------------- Page / Set Management ----------------------
   const addSetToPage = (setId: string) => {
     if (!currentImage) return;
-    
     const updatedPages = [...pages];
-    updatedPages[currentPage] = [
-      ...updatedPages[currentPage], 
-      {
-        setId,
-        imageUrl: currentImage,
-        cropArea: null // No additional cropping for the set layout
-      }
-    ];
+    updatedPages[currentPage].push({
+      setId,
+      imageUrl: currentImage, // store the current image for this set
+      cropArea: null,
+    });
     setPages(updatedPages);
   };
-  
-  // Remove a set from current page
+
   const removeSetFromPage = (index: number) => {
     const updatedPages = [...pages];
     updatedPages[currentPage] = updatedPages[currentPage].filter((_, i) => i !== index);
     setPages(updatedPages);
   };
-  
-  // Add a new page
+
   const addNewPage = () => {
     setPages([...pages, []]);
     setCurrentPage(pages.length);
   };
-  
-  // Switch to a different page
+
   const switchPage = (pageIndex: number) => {
     setCurrentPage(pageIndex);
   };
-  
-  // Select an uploaded image to use
-  const selectImage = (imageUrl: string) => {
-    setCurrentImage(imageUrl);
-  };
-  
- // Save to PDF
-const saveToPDF = async () => {
-  if (!canvasRef.current || pages.every(page => page.length === 0)) return;
-  
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  });
-  
-  // Process each page one by one
-  for (let i = 0; i < pages.length; i++) {
-    if (pages[i].length === 0) continue;
-    
-    // If not the first page, add a new page
-    if (i > 0) {
-      pdf.addPage();
-    }
-    
-    // Create a clone of the current page canvas for conversion
-    const pageElement = canvasRef.current.cloneNode(true) as HTMLElement;
-    
-    // Temporarily update the clone with content from the target page
-    if (i !== currentPage) {
-      // Clear the clone and add the correct page content
-      const container = pageElement.querySelector('.multi-set-container');
-      if (container) {
-        container.innerHTML = '';
-        
-        // Add the sets from the target page
-        pages[i].forEach((pageSet) => {
-          const setDiv = document.createElement('div');
-          setDiv.className = 'layout-set';
-          
-          if (pageSet.setId === 'setA') {
-            setDiv.innerHTML = `
-              <div class="set-a-layout">
-                <div class="large-photos">
-                  ${[1, 2].map(photoIndex => `
-                    <div class="photo photo-large">
-                      <img src="${pageSet.imageUrl}" alt="Large photo ${photoIndex}" style="object-fit: cover; width: 100%; height: 100%;">
-                    </div>
-                  `).join('')}
-                </div>
-                <div class="small-photos">
-                  <div class="small-photos-row">
-                    ${Array.from({ length: 4 }).map((_, photoIndex) => `
-                      <div class="photo photo-small">
-                        <img src="${pageSet.imageUrl}" alt="Small photo ${photoIndex + 1}" style="object-fit: cover; width: 100%; height: 100%;">
-                      </div>
-                    `).join('')}
-                  </div>
-                  <div class="small-photos-row">
-                    ${Array.from({ length: 4 }).map((_, photoIndex) => `
-                      <div class="photo photo-small">
-                        <img src="${pageSet.imageUrl}" alt="Small photo ${photoIndex + 5}" style="object-fit: cover; width: 100%; height: 100%;">
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-              </div>
-            `;
-          }
-          
-          container.appendChild(setDiv);
-        });
-      }
-    }
-    
-    // Prepare for PDF rendering
-    pageElement.style.position = 'absolute';
-    pageElement.style.left = '-9999px';
-    pageElement.style.width = '210mm';
-    pageElement.style.height = '297mm';
-    pageElement.style.margin = '0';
-    pageElement.style.padding = '8px';
-    pageElement.style.border = 'none';
-    pageElement.style.backgroundColor = 'white';
-    
-    // Temporarily add to document
-    document.body.appendChild(pageElement);
-    
-    // Convert to image with proper dimensions
-    const canvas = await html2canvas(pageElement, {
-      scale: 2, // Higher quality
-      useCORS: true,
-      allowTaint: true,
-      width: 210 * 3.78, // A4 width in pixels (1mm ≈ 3.78px)
-      height: 297 * 3.78, // A4 height in pixels
-      logging: false,
-      backgroundColor: '#FFFFFF'
+
+  // ---------------------- PDF Export (Optional) ----------------------
+  const saveToPDF = async () => {
+    if (!canvasRef.current || pages.every(page => page.length === 0)) return;
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
     });
-    
-    // Add the image to the PDF
-    const imgData = canvas.toDataURL('image/jpeg', 1.0);
-    pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-    
-    // Remove the temporary element
-    document.body.removeChild(pageElement);
-  }
-  
-  // Save the PDF
-  pdf.save('photo-layout.pdf');
-};
-  // Render the Set A layout for display
-  const renderSetA = (imageUrl: string) => {
-    return (
-      <div className="set-a-layout">
-        {/* Two 2x2 large photos */}
-        <div className="large-photos">
-          {[1, 2].map(index => (
-            <div key={`large-${index}`} className="photo photo-large">
-              <img src={imageUrl} alt={`Large photo ${index}`} />
-            </div>
-          ))}
-        </div>
-        
-        {/* Eight 1x1 small photos in 2 rows of 4, next to the 2x2 photos */}
-        <div className="small-photos">
-          <div className="small-photos-row">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={`small-row1-${index}`} className="photo photo-small">
-                <img src={imageUrl} alt={`Small photo ${index + 1}`} />
-              </div>
-            ))}
-          </div>
-          <div className="small-photos-row">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={`small-row2-${index}`} className="photo photo-small">
-                <img src={imageUrl} alt={`Small photo ${index + 5}`} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i].length === 0) continue;
+      if (i > 0) pdf.addPage();
+
+      // Create a temporary element
+      const tempElement = canvasRef.current.cloneNode(true) as HTMLElement;
+      tempElement.style.position = 'absolute';
+      tempElement.style.left = '-9999px';
+      tempElement.style.width = '210mm';
+      tempElement.style.height = '297mm';
+      document.body.appendChild(tempElement);
+
+      // TODO: Replace the .multi-set-container content with the sets from pages[i]
+      // For a full solution, replicate the rendering from MultiSetComponent
+      // or do a separate approach.
+
+      const canvas = await html2canvas(tempElement, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        width: 210 * 3.78,
+        height: 297 * 3.78,
+        logging: false,
+        backgroundColor: '#FFFFFF'
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+
+      document.body.removeChild(tempElement);
+    }
+
+    pdf.save('photo-layout.pdf');
   };
-  
-  return (
-    <div className="App">
-      <header className="App-header">
-        <h1>IDBP Manila Photo Printing</h1>
-      </header>
-      
-      {isCropping ? (
+
+  // ---------------------- Render ----------------------
+  if (isCropping && currentImage) {
+    // Show the cropping UI
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>IDBP Manila Photo Printing</h1>
+        </header>
+
         <div className="cropping-container">
           <h2>Crop Image</h2>
+
+          <div className="crop-actions crop-presets">
+            <button onClick={() => handleCropImage(null)}>Free Form</button>
+            <button onClick={() => handleCropImage(1)}>Square (1:1)</button>
+            <button onClick={() => handleCropImage(4/3)}>4:3</button>
+            <button onClick={() => handleCropImage(3/2)}>3:2</button>
+            <button onClick={() => handleCropImage(16/9)}>16:9</button>
+            <button onClick={() => handleCropImage(2/3)}>Portrait (2:3)</button>
+          </div>
+
           <div className="crop-canvas-container">
             <canvas
               ref={cropCanvasRef}
@@ -405,182 +391,130 @@ const saveToPDF = async () => {
               onMouseMove={handleCropMouseMove}
               onMouseUp={handleCropMouseUp}
               onMouseLeave={handleCropMouseUp}
-            ></canvas>
+            />
+            {/* Hidden image for reference */}
             <img
               ref={imageRef}
-              src={currentImage || ''}
+              src={currentImage}
+              alt="Crop reference"
               style={{ display: 'none' }}
-              alt="Image for cropping"
               onLoad={() => {
+                // Sync the cropCanvas size to the image's display size
                 const canvas = cropCanvasRef.current;
                 const image = imageRef.current;
                 if (canvas && image) {
+                  // We'll just use the image's natural width/height
                   canvas.width = image.naturalWidth;
                   canvas.height = image.naturalHeight;
+
                   const ctx = canvas.getContext('2d');
                   if (ctx) {
-                    ctx.drawImage(image, 0, 0);
+                    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
                   }
                 }
               }}
             />
           </div>
+
+          <div className="crop-hints">
+            <p>Click and drag to select the crop area. Use the presets above for common aspect ratios.</p>
+            {cropArea && (
+              <div className="crop-info">
+                <span>W: {Math.abs(Math.round(cropArea.width))}px</span>
+                <span>H: {Math.abs(Math.round(cropArea.height))}px</span>
+              </div>
+            )}
+          </div>
+
           <div className="crop-actions">
-            <p>Click and drag to select crop area</p>
-            <button className="apply-crop-button" onClick={applyCrop}>Apply Crop</button>
-            <button className="cancel-crop-button" onClick={cancelCrop}>Cancel</button>
+            <button className="apply-crop-button" onClick={applyCrop}>
+              Apply Crop
+            </button>
+            <button className="cancel-crop-button" onClick={cancelCrop}>
+              Cancel
+            </button>
           </div>
         </div>
-      ) : (
-        <div className="container">
-          <div className="controls">
-            <div className="upload-section">
-            <h2>Upload &amp; Manage Images</h2>
-      {/* Hidden file input */}
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleImageUpload}
-        className="file-input"
-        id="file-upload"
-        multiple
-      />
-      {/* Styled label that triggers the file input */}
-      <label htmlFor="file-upload" className="file-label">
-        Choose Images
-      </label>
-              
-              {uploadedImages.length > 0 && (
-                <div className="image-gallery">
-                  <h3>Your Images</h3>
-                  <div className="image-thumbnails">
-                    {uploadedImages.map((img, index) => (
-                      <div 
-                        key={`img-${index}`}
-                        className={`image-thumbnail ${currentImage === img ? 'selected' : ''}`}
-                        onClick={() => selectImage(img)}
-                      >
-                        <img src={img} alt={`Thumbnail ${index}`} />
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {currentImage && (
-                    <div className="selected-image-actions">
-                      <button className="crop-button" onClick={startCrop}>Crop This Image</button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            <div className="layout-options">
-              <h2>Available Layout Sets</h2>
-              <div className="layout-sets">
-                {availableLayoutSets.map(set => (
-                  <div 
-                    key={set.id} 
-                    className="layout-set-option"
-                  >
-                    <h3>{set.name}</h3>
-                    <p>{set.description}</p>
-                    <button 
-                      className="add-set-button"
-                      onClick={() => addSetToPage(set.id)}
-                      disabled={!currentImage}
-                    >
-                      Add to current page
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="page-management">
-              <h2>Page Management</h2>
-              <div className="page-tabs">
-                {pages.map((page, index) => (
-                  <button 
-                    key={`page-${index}`}
-                    className={`page-tab ${currentPage === index ? 'active' : ''}`}
-                    onClick={() => switchPage(index)}
-                  >
-                    Page {index + 1} ({page.length} sets)
-                  </button>
-                ))}
-                <button className="add-page-button" onClick={addNewPage}>+ Add Page</button>
-              </div>
-              
-              <div className="current-page-sets">
-                <h3>Sets on current page</h3>
-                {pages[currentPage].length === 0 ? (
-                  <p>No sets added. Select a layout set from above.</p>
-                ) : (
-                  <ul className="page-sets-list">
-                    {pages[currentPage].map((pageSet, index) => {
-                      const set = availableLayoutSets.find(s => s.id === pageSet.setId);
-                      return (
-                        <li key={`page-set-${index}`} className="page-set-item">
-                          <div className="page-set-info">
-                            <span>{set?.name || pageSet.setId}</span>
-                            <img src={pageSet.imageUrl} alt={`Set thumbnail ${index}`} className="set-thumbnail" />
-                          </div>
-                          <button 
-                            className="remove-set-button"
-                            onClick={() => removeSetFromPage(index)}
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
+      </div>
+    );
+  }
+
+  // Otherwise, show the normal UI
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>IDBP Manila Photo Printing</h1>
+      </header>
+
+      <div className="container">
+        {/* Left side: Upload & Layout selection */}
+        <div className="controls">
+          <ImageUploader
+            uploadedImages={uploadedImages}
+            onImagesChange={handleImagesChange}
+            currentImage={currentImage}
+            onCurrentImageChange={handleCurrentImageChange}
+            onCropImage={() => handleCropImage(null)} // triggers setIsCropping(true) with free-form crop
+          />
+
           
-          <div className="output-section">
-            <h2>A4 Canvas - Page {currentPage + 1}</h2>
-            <div 
-              ref={canvasRef} 
-              className="a4-canvas"
-            >
-              <div className="multi-set-container">
-                {pages[currentPage].map((pageSet, index) => {
-                  const set = availableLayoutSets.find(s => s.id === pageSet.setId);
-                  return (
-                    <div key={`output-set-${index}`} className="layout-set">
-                      <h3 style={{display: "none"}}>Set {index + 1}: {set?.name || pageSet.setId}</h3>
-                      {pageSet.setId === 'setA' && renderSetA(pageSet.imageUrl)}
-                      {/* Add rendering for other set types here */}
-                    </div>
-                  );
-                })}
+          {currentImage && (
+            <div className="rotation-controls" style={{display: "none"}}>
+              <h3>Rotate Image</h3>
+              <div className="rotation-buttons">
+                <button onClick={() => handleRotateImage(-90)}>↶ Rotate Left</button>
+                <button onClick={() => handleRotateImage(90)}>↷ Rotate Right</button>
+                <button onClick={() => handleRotateImage(180)}>↷↷ Flip 180°</button>
+              </div>
+              <div className="rotation-info">
+                <span>Current rotation: {currentRotation}°</span>
               </div>
             </div>
-            
-            <div className="actions">
-              <button 
-                className="save-pdf-button"
-                onClick={saveToPDF}
-                disabled={pages.every(page => page.length === 0)}
-              >
-                Save as PDF
-              </button>
-              <button 
-                className="print-button"
-                onClick={() => window.print()}
-                disabled={pages.every(page => page.length === 0)}
-              >
-                Print All Pages
-              </button>
-            </div>
+          )} 
+
+          <LayoutSelector
+            availableLayoutSets={availableLayoutSets}
+            currentImage={currentImage}
+            onAddSetToPage={addSetToPage}
+          />
+
+          <PageManagement
+            pages={pages}
+            currentPage={currentPage}
+            onSwitchPage={switchPage}
+            onAddNewPage={addNewPage}
+            onRemoveSetFromPage={removeSetFromPage}
+          />
+        </div>
+
+        {/* Right side: "Canvas" preview for the current page */}
+        <div className="output-section">
+          <h2>A4 Canvas - Page {currentPage + 1}</h2>
+
+          <div ref={canvasRef} className="a4-canvas">
+            <MultiSetComponent pageSets={pages[currentPage]} />
+          </div>
+
+          <div className="actions">
+            <button
+              className="save-pdf-button"
+              onClick={saveToPDF}
+              disabled={pages.every(page => page.length === 0)}
+            >
+              Save as PDF
+            </button>
+            <button
+              className="print-button"
+              onClick={() => window.print()}
+              disabled={pages.every(page => page.length === 0)}
+            >
+              Print All Pages
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
-};
+}
 
 export default App;
