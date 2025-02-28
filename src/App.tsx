@@ -21,7 +21,7 @@ const availableLayoutSets: LayoutSet[] = [
     id: 'setB',
     name: 'Set B',
     layoutType: 'setB',
-    description: '3 (1.5x1.5) photos and 3 small (1x1) photos'
+    description: '3 (1.5x1.5) photos and 4 small (1x1) photos'
   },
   {
     id: 'setC',
