@@ -371,7 +371,7 @@ const saveToPDF = async () => {
         <div className="small-photos">
           <div className="small-photos-row">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={`small-row1-${index}`} className="photo photoc-small">
+              <div key={`small-row1-${index}`} className="photo photo-small">
                 <img src={imageUrl} alt={`Small photo ${index + 1}`} />
               </div>
             ))}

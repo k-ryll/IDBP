@@ -1,3 +1,6 @@
+
+/* A4 dimensions: 210 × 297 mm */
+
 /* A4 dimensions: 210 × 297 mm (8.27 × 11.69 inches) */
 .App {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -260,8 +263,6 @@
   width: 210mm;
   height: 297mm;
   margin: 0 auto;
-  padding: 1mm;
-  padding-left: 1.5mm;
   background-color: white;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   overflow: auto;
@@ -275,6 +276,7 @@
 
 .layout-set {
   margin-top: 2.5mm;
+  padding-left: 3px;
 }
 
 .set-a-layout {
@@ -283,6 +285,7 @@
   align-items: flex-start;
   gap: 2px;
   width: 100%;
+
 }
 
 .large-photos {
@@ -317,13 +320,13 @@
 /* Converting inches to mm for print accuracy */
 /* 1 inch = 25.4 mm */
 .photo-large {
-  width: 2in;  /* 2 inches */
-  height: 2in; /* 2 inches */
+  width: 2in !important;  /* 2 inches */
+  height: 2in !important; /* 2 inches */
 }
 
 .photo-small {
-  width: 1in;  /* 1 inch */
-  height: 1in; /* 1 inch */
+  width: 1in !important;  /* 1 inch */
+  height: 1in !important; /* 1 inch */
 }
 
 .actions {
