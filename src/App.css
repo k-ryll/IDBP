@@ -339,7 +339,7 @@
 
 .photo {
   overflow: hidden;
-  border: .5px solid #3f3f3f;
+  border: 1px solid #aba9a9;
   object-fit: cover;
 }
 
