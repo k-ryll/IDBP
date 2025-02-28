@@ -63,7 +63,9 @@
 .file-label:hover {
   background-color: #0056b3;
 }
-
+.naming-canvas{
+  width: 600px;
+}
 
 
 .image-gallery {
@@ -84,6 +86,10 @@
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
+}
+.name-input{
+  display: flex;
+  gap: 1rem;
 }
 
 .image-thumbnail.selected {

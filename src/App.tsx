@@ -595,7 +595,12 @@ const applyName = () => {
               value={imageName}
               onChange={(e) => setImageName(e.target.value)}
             />
+            <div className="naming-actions">
+            <button onClick={applyName}>Apply Name</button>
+            <button onClick={cancelName}>Cancel</button>
           </div>
+          </div>
+          
           <div className="naming-canvas-container">
             <canvas
               ref={cropCanvasRef}
@@ -610,10 +615,7 @@ const applyName = () => {
               onLoad={handleNameImageLoad}
             />
           </div>
-          <div className="naming-actions">
-            <button onClick={applyName}>Apply Name</button>
-            <button onClick={cancelName}>Cancel</button>
-          </div>
+          
         </div>
       </div>
     );
