@@ -100,15 +100,15 @@
   margin-top: 15px;
 }
 
-.crop-button {
+.crop-button, .name-button, .naming-actions button {
   padding: 5px 10px;
   background-color: #4285f4;
   color: white;
   border: none;
   border-radius: 3px;
   cursor: pointer;
+  margin-right: .5rem;
 }
-
 .set-thumbnail {
   width: 40px;
   height: 40px;

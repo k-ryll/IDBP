@@ -63,7 +63,7 @@ const MultiSetComponent: React.FC<MultiSetProps> = ({ pageSets }) => {
           ))}
         </div>
         <div className="small-photos-row">
-          {Array.from({ length: 2 }).map((_, idx) => (
+          {Array.from({ length: 2}).map((_, idx) => (
             <div key={`small-row1-${idx}`} className="photo photo-small">
               <img src={imageUrl} alt={`Small photo ${idx + 1}`} />
             </div>

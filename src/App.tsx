@@ -1,4 +1,4 @@
-import { useState, useRef, MouseEvent } from 'react';
+import { useState, useRef, MouseEvent, useEffect } from 'react';
 import './App.css';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -51,6 +51,11 @@ function App() {
   const [pages, setPages] = useState<PageSet[][]>([[]]);
   const [currentPage, setCurrentPage] = useState<number>(0);
 
+  const [isAddingName, setIsAddingName] = useState<boolean>(false);
+  const [imageName, setImageName] = useState<string>('');
+  const [namePosition, setNamePosition] = useState<{ x: number; y: number } | null>(null);
+
+
   // Cropping-related states
   const [isCropping, setIsCropping] = useState<boolean>(false);
   const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
@@ -68,14 +73,150 @@ function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // ---------------------- Image Upload Handlers ----------------------
-  const handleImagesChange = (images: string[]) => {
-    setUploadedImages(images);
+  
+
+  const handleNameImageLoad = () => {
+    const canvas = cropCanvasRef.current;
+    const image = imageRef.current;
+    if (!canvas || !image) return;
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    if (namePosition) {
+      drawNameOnCanvas(ctx, imageName, namePosition);
+    }
+  };
+   // ---------------------- Draw Name Utility ----------------------
+   const drawNameOnCanvas = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    pos: { x: number; y: number },
+  ) => {
+    if (!text.trim()) return;
+  
+    // Calculate text metrics     
+    ctx.font = '28px Arial';
+
+
+    
+    // Calculate background dimensions
+    const backgroundWidth = 100000;
+    const backgroundHeight = 70; // Fixed height similar to passport photos
+    const backgroundX = pos.x - backgroundWidth/2;
+    const backgroundY = pos.y - 25;
+  
+    // Draw white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(backgroundX, backgroundY, backgroundWidth, backgroundHeight);
+  
+    // Draw text
+    ctx.fillStyle = 'black';
+    ctx.font = '45px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pos.x, pos.y + 10);
+  };
+  // ---------------------- Update Canvas Live ----------------------
+  // Update the useEffect for live preview
+useEffect(() => {
+  if (isAddingName && cropCanvasRef.current && imageRef.current) {
+    const canvas = cropCanvasRef.current;
+    const image = imageRef.current;
+    
+    // Calculate scaled dimensions
+    const scaleFactor = STANDARD_IMAGE_WIDTH / image.naturalWidth;
+    const scaledWidth = STANDARD_IMAGE_WIDTH;
+    const scaledHeight = image.naturalHeight * scaleFactor;
+
+    // Set canvas dimensions
+    canvas.width = scaledWidth;
+    canvas.height = scaledHeight;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Draw scaled image
+      ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+      
+      // Calculate default position
+      const pos = namePosition || { 
+        x: scaledWidth / 2,
+        y: scaledHeight - NAME_BOTTOM_MARGIN
+      };
+      
+      drawNameOnCanvas(ctx, imageName, pos);
+    }
+  }
+}, [imageName, namePosition, isAddingName]);
+
+  // ---------------------- Handlers for Name Mode ----------------------
+  const handleCanvasClickForName = (e: MouseEvent<HTMLCanvasElement>) => {
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    setNamePosition({ x, y });
   };
 
-  const handleCurrentImageChange = (imageUrl: string) => {
-    setCurrentImage(imageUrl);
-    // Reset rotation when changing images
-    setCurrentRotation(0);
+  // Add these constants at the top
+const STANDARD_IMAGE_WIDTH = 600;
+const NAME_BOTTOM_MARGIN = 40;
+
+// Update the applyName function
+const applyName = () => {
+  if (!currentImage || !imageName.trim()) {
+    setIsAddingName(false);
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    // Calculate scaled dimensions
+    const scaleFactor = STANDARD_IMAGE_WIDTH / img.naturalWidth;
+    const scaledWidth = STANDARD_IMAGE_WIDTH;
+    const scaledHeight = img.naturalHeight * scaleFactor;
+
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = scaledWidth;
+    offCanvas.height = scaledHeight;
+    
+    const ctx = offCanvas.getContext('2d');
+    if (!ctx) {
+      setIsAddingName(false);
+      return;
+    }
+
+    // Draw scaled image
+    ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+    
+    // Calculate position
+    const pos = namePosition || {
+      x: scaledWidth / 2,
+      y: scaledHeight - NAME_BOTTOM_MARGIN
+    };
+    
+    drawNameOnCanvas(ctx, imageName, pos);
+    
+    const finalDataUrl = offCanvas.toDataURL('image/png');
+    setCurrentImage(finalDataUrl);
+    setUploadedImages(prev => [...prev, finalDataUrl]);
+    setIsAddingName(false);
+    setImageName('');
+    setNamePosition(null);
+  };
+  img.src = currentImage;
+};
+  const cancelName = () => {
+    setIsAddingName(false);
+    setImageName('');
+    setNamePosition(null);
   };
 
   // ---------------------- Rotate Image ----------------------
@@ -438,7 +579,45 @@ function App() {
       </div>
     );
   }
-
+  // Add-Name UI
+  if (isAddingName && currentImage) {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>IDBP Manila Photo Printing</h1>
+        </header>
+        <div className="naming-container">
+          <h2>Add Name to Image</h2>
+          <div className="name-input">
+            <input
+              type="text"
+              placeholder="Enter name here..."
+              value={imageName}
+              onChange={(e) => setImageName(e.target.value)}
+            />
+          </div>
+          <div className="naming-canvas-container">
+            <canvas
+              ref={cropCanvasRef}
+              className="naming-canvas"
+              onClick={handleCanvasClickForName}
+            />
+            <img
+              ref={imageRef}
+              src={currentImage}
+              alt="Naming reference"
+              style={{ display: 'none' }}
+              onLoad={handleNameImageLoad}
+            />
+          </div>
+          <div className="naming-actions">
+            <button onClick={applyName}>Apply Name</button>
+            <button onClick={cancelName}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   // Otherwise, show the normal UI
   return (
     <div className="App">
@@ -449,12 +628,19 @@ function App() {
       <div className="container">
         {/* Left side: Upload & Layout selection */}
         <div className="controls">
-          <ImageUploader
+        <ImageUploader
             uploadedImages={uploadedImages}
-            onImagesChange={handleImagesChange}
+            onImagesChange={setUploadedImages}
             currentImage={currentImage}
-            onCurrentImageChange={handleCurrentImageChange}
-            onCropImage={() => handleCropImage(null)} // triggers setIsCropping(true) with free-form crop
+            onCurrentImageChange={setCurrentImage}
+            onCropImage={(imgUrl) => {
+              setCurrentImage(imgUrl);
+              setIsCropping(true);
+            }}
+            onAddName={(imgUrl) => {
+              setCurrentImage(imgUrl);
+              setIsAddingName(true);
+            }}
           />
 
           

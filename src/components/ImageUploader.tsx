@@ -1,12 +1,14 @@
 // src/components/ImageUploader.tsx
-import React, {  ChangeEvent } from 'react';
+import React, { ChangeEvent } from 'react';
 
 interface ImageUploaderProps {
   uploadedImages: string[];
   onImagesChange: (images: string[]) => void;
   currentImage: string | null;
   onCurrentImageChange: (image: string) => void;
-  onCropImage: (imageUrl: string) => void; // If you want to start cropping
+  onCropImage: (imageUrl: string) => void;
+  // NEW: Add a callback for the "Add Name" action
+  onAddName: (imageUrl: string) => void;
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -14,13 +16,12 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   onImagesChange,
   currentImage,
   onCurrentImageChange,
-  onCropImage
+  onCropImage,
+  onAddName,
 }) => {
-  // For simplicity, we do not handle cropping here directly
-  // but we could add a "Crop" button and call onCropImage
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -69,6 +70,11 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             <div className="selected-image-actions">
               <button className="crop-button" onClick={() => onCropImage(currentImage)}>
                 Crop This Image
+              </button>
+
+              {/* NEW: Add Name button next to Crop */}
+              <button className="name-button" onClick={() => onAddName(currentImage)}>
+                Add Name
               </button>
             </div>
           )}
