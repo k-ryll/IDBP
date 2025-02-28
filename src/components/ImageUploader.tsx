@@ -1,5 +1,5 @@
 // src/components/ImageUploader.tsx
-import React, { useState, ChangeEvent } from 'react';
+import React, {  ChangeEvent } from 'react';
 
 interface ImageUploaderProps {
   uploadedImages: string[];
