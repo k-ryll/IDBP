@@ -37,9 +37,9 @@ const availableLayoutSets: LayoutSet[] = [
   },
   {
     id: 'setE',
-    name: 'Set E / CASA',
+    name: 'Set E / ASA',
     layoutType: 'setE',
-    description: '5 (2.34x1.5) photos'
+    description: '5 (3x1.5) photos'
   },
   // ... add more sets as needed
 ];
@@ -105,7 +105,7 @@ function App() {
     const backgroundWidth = 100000;
     const backgroundHeight = 70; // Fixed height similar to passport photos
     const backgroundX = pos.x - backgroundWidth/2;
-    const backgroundY = pos.y - 25;
+    const backgroundY = pos.y - 28;
   
     // Draw white background
     ctx.fillStyle = 'white';
@@ -113,7 +113,7 @@ function App() {
   
     // Draw text
     ctx.fillStyle = 'black';
-    ctx.font = '45px Arial';
+    ctx.font = '55px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, pos.x, pos.y + 10);
